@@ -1,0 +1,210 @@
+Reproducible Research - Exploring the NOAA Storm Database
+=========================================================
+
+by Vajo Lukic
+
+Synopsis
+---------------
+
+The goal of this analysis is to explore the NOAA Storm Database and answer some basic questions about severe weather events. This database tracks features of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. The events in the database start in the year 1950 and end in November 2011. 
+
+In this analysis we are going to answer following questions:
+- Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+- Across the United States, which types of events have the greatest economic consequences?
+
+
+Data Processing
+---------------
+
+The data for this assignment come in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. File can be downloaded from this link: [NOAA Storm Data Set] (https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) 
+
+There is also some documentation explaining database in detail:
+
+- National Weather Service [Storm data documentation] (https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+- National Climatic Data Center Storm Events [FAQ] (https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+Here are the steps we have performed to process the data:
+
+- Set up or create a working directory
+```{r echo=TRUE}
+setwd("c:\\")
+if (!file.exists("tmp")) {
+  dir.create("tmp")
+}
+setwd("c:\\tmp")
+
+```
+
+- Set URL for download and download the file
+```{r echo=TRUE, cache=TRUE}
+fileUrl <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileUrl,  "repdata-data-StormData.csv.bz2")
+```
+
+- Document when the files have been downloaded
+```{r echo=TRUE}
+dateDownloaded <- date()
+dateDownloaded
+```
+
+- Load the data into table
+```{r echo=TRUE, cache=TRUE}
+stormData <- read.table("repdata-data-StormData.csv.bz2", header = TRUE, sep = ",", fill = TRUE)
+```
+
+- Display the structure of the data set
+```{r echo=TRUE}
+str(stormData)
+```
+
+- Display number of rows and columns in the data set
+```{r echo=TRUE}
+dim(stormData)
+```
+
+- Create subset of data for fatalities only
+```{r echo=TRUE, cache=TRUE}
+fsum <- aggregate(stormData$FATALITIES, by = list(stormData$EVTYPE), FUN = sum)
+```
+
+- Ad names to columns of fatalities subset
+```{r echo=TRUE}
+names(fsum) <- c("fname","fnumber")
+```
+
+- Order fatalities subset decreasingly
+```{r echo=TRUE}
+fsum <- fsum[order(fsum$fnumber, decreasing=TRUE), ]
+```
+
+- Create subset of data for injuries only
+```{r echo=TRUE, cache=TRUE}
+isum <- aggregate(stormData$INJURIES, by = list(stormData$EVTYPE), FUN = sum)
+```
+
+- Ad names to columns of injuries subset
+```{r echo=TRUE}
+names(isum) <- c("iname","inumber")
+```
+
+- Order injuries subset decreasingly
+```{r echo=TRUE}
+isum <- isum[order(isum$inumber, decreasing=TRUE), ]
+```
+
+
+This completes data processing for getting answers about most harmful types of events.
+
+To further analyze the economic impact of those events on crops and property, we need to analyze data in these columns:
+- PROPDMGEXP: magnitude of the number value of property damage 
+- CROPDMGEXP: magnitude of the number value of crop damage 
+
+- Analyze data in PROPDMGEXP column
+```{r echo=TRUE}
+unique(stormData$PROPDMGEXP)
+```
+
+- Analyze data in CROPDMGEXP column
+```{r echo=TRUE}
+unique(stormData$CROPDMGEXP)
+```
+
+We can see that there is a lot of different values in these two columns, and ot all of this data is correct. Document "National Weather Service Storm Data Documentation", page 12. states: 
+
+"Estimates should be rounded to three significant digits, followed by an alphabetical character signifying the magnitude of the number, i.e., 1.55B for $1,550,000,000. Alphabetical characters used to signify magnitude include "K" for thousands, "M" for millions, and "B" for billions."
+
+For this reason we are going to use only those records which have one of these values in these fields: "", m", "k", "b", "M", "K", "B"
+- ""      : hundrets
+- "k", "K": thousands
+- "m", "M": milions
+- "b", "B": bilions
+
+- Subset main data set to calculate only crop damage value
+```{r echo=TRUE}
+stormData$CROPDMGEXP2 <- as.character(stormData$CROPDMGEXP)
+cropData <- stormData[stormData$CROPDMGEXP2 %in% c("","k","K","m", "M","b","B"), ]
+```
+
+- Create new column DAMAGEVALUE and calculate it by multipying damage value by magnitude
+```{r echo=TRUE}
+cropData$DAMAGEVALUE <- NA
+cropData$DAMAGEVALUE <- ifelse(cropData$CROPDMGEXP2 == "K" | cropData$CROPDMGEXP2 == "k", cropData$CROPDMG * 1000, cropData$DAMAGEVALUE)
+cropData$DAMAGEVALUE <- ifelse(cropData$CROPDMGEXP2 == "M" | cropData$CROPDMGEXP2 == "m", cropData$CROPDMG * 1e+06, cropData$DAMAGEVALUE)
+cropData$DAMAGEVALUE <- ifelse(cropData$CROPDMGEXP2 == "B" | cropData$CROPDMGEXP2 == "b", cropData$CROPDMG * 1e+09, cropData$DAMAGEVALUE)
+cropData$DAMAGEVALUE <- ifelse(cropData$CROPDMGEXP2 == "", 0, cropData$DAMAGEVALUE)
+```
+
+- Order "crop" data set by damage value descending
+```{r echo=TRUE}
+cropData <- cropData[order(cropData$DAMAGEVALUE, decreasing=TRUE), ] 
+```
+
+- Summarize "crop" damage value per event and order this set by damage value descending
+```{r echo=TRUE}
+csum <- aggregate(cropData$DAMAGEVALUE, by = list(cropData$EVTYPE), FUN = sum)
+names(csum) <- c("cname","cnumber")
+csum <- csum[order(csum$cnumber, decreasing=TRUE), ]
+```
+
+- Subset main data set to calculate property damage value
+```{r echo=TRUE}
+stormData$PROPDMGEXP2 <- as.character(stormData$PROPDMGEXP)
+propData <- stormData[stormData$PROPDMGEXP %in% c("","k","K","m", "M","b","B"), ]
+```
+
+```{r echo=TRUE}
+propData$DAMAGEVALUE <- NA
+propData$DAMAGEVALUE <- ifelse(propData$PROPDMGEXP2 == "K" | propData$PROPDMGEXP2 == "k", propData$PROPDMG * 1000, propData$DAMAGEVALUE)
+propData$DAMAGEVALUE <- ifelse(propData$PROPDMGEXP2 == "M" | propData$PROPDMGEXP2 == "m", propData$PROPDMG * 1e+06, propData$DAMAGEVALUE)
+propData$DAMAGEVALUE <- ifelse(propData$PROPDMGEXP2 == "B" | propData$PROPDMGEXP2 == "b", propData$PROPDMG * 1e+09, propData$DAMAGEVALUE)
+propData$DAMAGEVALUE <- ifelse(propData$PROPDMGEXP2 == "", 0, propData$DAMAGEVALUE)
+```
+
+- Order "property" data set by damage value descending
+```{r echo=TRUE}
+propData <- propData[order(propData$DAMAGEVALUE, decreasing=TRUE), ] 
+```
+
+- Summarize "property" damage value per event and order this set by damage value descending
+```{r echo=TRUE}
+psum <- aggregate(propData$DAMAGEVALUE, by = list(propData$EVTYPE), FUN = sum)
+names(psum) <- c("pname","pnumber")
+psum <- psum[order(psum$pnumber, decreasing=TRUE), ]
+```
+
+
+
+Results
+---------------
+
+Most harmful events (injuries and fatalities )
+-----------------------------------------------------------------
+
+- Plot the data for injuries showing top 10 events causing injuries
+```{r echo=TRUE}
+barplot(height = isum[1:10, "inumber"], names.arg = isum[1:10, "iname"], las = 2, cex.axis = 0.7, 
+        cex.names = 0.7, main = "Top 10 Events Causing Injuries", ylab = "Number Of Injuries")
+```
+
+- Plot the data for fatalities showing top 10 events causing fatalities
+```{r echo=TRUE}
+barplot(height = fsum[1:10, "fnumber"], names.arg = fsum[1:10, "fname"], las = 2, cex.axis = 0.7, 
+        cex.names = 0.7, main = "Top 10 Events Causing Fatalities", ylab = "Number Of Fatalities")
+```
+
+
+Events with greates economic impact (crops and propery damage value)
+--------------------------------------------------------------------
+
+IMPORTANT! This is a multi panel window with two plots 
+
+- Use "par" function to set a matrix of two plots
+```{r echo=TRUE}
+par(mfrow = c(1, 2))
+par(oma = c(4, 2, 2, 2))
+barplot(height = csum[1:10, "cnumber"], names.arg = csum[1:10, "cname"], las = 2, cex.axis = 0.7, cex.main = 0.8,
+        cex.names = 0.7, main = "Top 10 Crop Damage Events", ylab = "Damage amount in US dollars")
+barplot(height = psum[1:10, "pnumber"], names.arg = psum[1:10, "pname"], las = 2, cex.axis = 0.7, cex.main = 0.8, 
+        cex.names = 0.7, main = "Top 10 Property Damage Events", ylab = "Damage amount in US dollars")
+```
+
